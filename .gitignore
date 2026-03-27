@@ -1,0 +1,29 @@
+# Dependencies — never commit these
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+build/
+**/dist/
+**/build/
+
+# Environment files — keep secrets out of git
+.env
+.env.local
+.env.production
+**/.env
+
+# Kiro internal
+.kiro/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# TypeScript cache
+*.tsbuildinfo
