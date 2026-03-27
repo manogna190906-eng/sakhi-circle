@@ -2,6 +2,24 @@ import { Pool } from 'pg';
 import { Post, Comment, User, PublicPost, PublicComment } from '../types';
 import { toPublicPost, toPublicComment } from '../utils/anonymity';
 
+// Raw DB row for the post+user join.
+// Defined separately to avoid the Post & User intersection conflict on 'status'.
+interface PostUserRow {
+  post_id: string;
+  user_id: string;
+  title: string;
+  content: string;
+  type: Post['type'];
+  category: string;
+  is_anonymous: boolean;
+  status: Post['status'];
+  created_at: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  user_is_anonymous: boolean;
+}
+
 export class PostService {
   constructor(private db: Pool) {}
 
@@ -34,10 +52,12 @@ export class PostService {
    * Get a single post with its comments.
    * isAdmin=true reveals real identities for anonymous content.
    */
-  async getPost(postId: string, isAdmin = false): Promise<PublicPost & { comments: PublicComment[] }> {
-    // Fetch post + author
-    const { rows: postRows } = await this.db.query<Post & User>(
-      `SELECT p.*, u.name, u.email, u.phone, u.is_anonymous as user_is_anonymous
+  async getPost(
+    postId: string,
+    isAdmin = false,
+  ): Promise<PublicPost & { comments: PublicComment[] }> {
+    const { rows: postRows } = await this.db.query<PostUserRow>(
+      `SELECT p.*, u.name, u.email, u.phone, u.is_anonymous AS user_is_anonymous
        FROM posts p
        JOIN users u ON u.user_id = p.user_id
        WHERE p.post_id = $1 AND p.status = 'published'`,
@@ -62,7 +82,7 @@ export class PostService {
       name: row.name,
       email: row.email,
       phone: row.phone,
-      is_anonymous: (row as any).user_is_anonymous,
+      is_anonymous: row.user_is_anonymous,
       profile_visibility: 'public',
       bio: null,
       interests: [],
@@ -72,14 +92,14 @@ export class PostService {
     };
 
     // Reaction counts
-    const { rows: reactionRows } = await this.db.query(
+    const { rows: reactionRows } = await this.db.query<{ type: string; count: number }>(
       `SELECT type, COUNT(*)::int AS count FROM reactions WHERE post_id = $1 GROUP BY type`,
       [postId],
     );
     const reactionCounts: Record<string, number> = {};
     for (const r of reactionRows) reactionCounts[r.type] = r.count;
 
-    // Comments + authors (top-level only; replies fetched separately)
+    // Top-level comments + authors
     const { rows: commentRows } = await this.db.query<Comment & { author_name: string }>(
       `SELECT c.*, u.name AS author_name
        FROM comments c
@@ -105,7 +125,6 @@ export class PostService {
           created_at: cr.created_at,
         };
 
-        // Fetch replies for this comment
         const { rows: replyRows } = await this.db.query<Comment & { author_name: string }>(
           `SELECT c.*, u.name AS author_name
            FROM comments c
@@ -185,7 +204,7 @@ export class PostService {
 
   /** Soft-delete a post (author or admin only). */
   async deletePost(postId: string, requesterId: string, isAdmin: boolean): Promise<void> {
-    const { rows } = await this.db.query<Post>(
+    const { rows } = await this.db.query<{ user_id: string }>(
       `SELECT user_id FROM posts WHERE post_id = $1`,
       [postId],
     );
