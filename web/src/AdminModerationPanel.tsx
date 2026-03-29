@@ -1,5 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { ModerationQueueItem } from '../../backend/src/types';
+
+// Inline type to avoid cross-package import issues during build
+interface ModerationQueueItem {
+  report_id: string;
+  priority: 'normal' | 'high';
+  status: string;
+  reason: string;
+  created_at: string;
+  reporter_id: string;
+  target_type: 'post' | 'comment' | 'user';
+  target_id: string;
+  target_preview: string | null;
+  author_id: string | null;
+  author_name: string | null;
+  ai_risk_score: number | null;
+}
 
 const API = process.env.REACT_APP_API_URL ?? 'http://localhost:3000';
 
